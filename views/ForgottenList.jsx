@@ -2,9 +2,10 @@ import React from 'react';
 import UserRow from '../UserRow';
 
 export default function ForgottenList({ snapshots }) {
-    if (!snapshots.length) return <div className="text-zinc-500 text-center mt-20">No data available.</div>;
+    if (!snapshots || snapshots.length === 0) return <div className="text-zinc-500 text-center mt-20">No data available.</div>;
 
-    const { pending } = snapshots[0].data;
+    const latestSnapshot = snapshots[snapshots.length - 1] || {};
+    const pending = Array.isArray(latestSnapshot?.data?.pending) ? latestSnapshot.data.pending : [];
 
     return (
         <div className="max-w-4xl mx-auto space-y-6">

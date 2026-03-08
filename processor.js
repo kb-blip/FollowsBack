@@ -76,7 +76,7 @@ const createSnapshot = ({ followers, following, pending }) => {
             nonMutualCount: nonMutuals.length,
             pendingCount: pending.length,
         },
-        data: { followers, following, nonMutuals, fans, pending }
+        data: { followers, following, mutuals, nonMutuals, fans, pending }
     };
 };
 
