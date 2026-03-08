@@ -8,6 +8,7 @@
         "dev:watch": "concurrently \"npm run watch:ingest\" \"npm run dev\""
     },
     "dependencies": {
+        "@vitejs/plugin-react": "^5.1.4",
         "adm-zip": "^0.5.16",
         "chokidar": "^4.0.3",
         "fs-extra": "^11.3.0",

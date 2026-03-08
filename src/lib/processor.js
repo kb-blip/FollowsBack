@@ -1,6 +1,5 @@
 import JSZip from 'jszip';
 
-// Extractor for Instagram's nested JSON structure
 const extractUser = (item) => {
     try {
         if (item.string_list_data && item.string_list_data[0]) {
@@ -9,23 +8,16 @@ const extractUser = (item) => {
                 timestamp: item.string_list_data[0].timestamp || null,
             };
         }
-        return {
-            username: item.value || item.username || "unknown",
-            timestamp: item.timestamp || null
-        };
+        return { username: item.value || item.username || "unknown", timestamp: item.timestamp || null };
     } catch (e) {
         return { username: "unknown" };
     }
 };
 
-// AGGRESSIVE NORMALIZER: Hunts down the actual array of users, 
-// ignoring any weird metadata Instagram throws into the file.
 const normalize = (data) => {
     if (Array.isArray(data)) return data;
-
     if (data && typeof data === 'object') {
         let largestArray = [];
-        // Loop through every key in the object to find the biggest array
         for (const key in data) {
             if (Array.isArray(data[key]) && data[key].length > largestArray.length) {
                 largestArray = data[key];
@@ -42,15 +34,12 @@ export const processZipUpload = async (file) => {
     const rawData = { followers: [], following: [], pending: [] };
 
     const parseZipFiles = async (exactFilename, targetArray) => {
-        // Use exact matching to prevent reading the wrong files
         const filePaths = Object.keys(unzipped.files).filter(name =>
             name.endsWith(`/${exactFilename}`) || name === exactFilename
         );
-
         for (const path of filePaths) {
             const content = await unzipped.files[path].async('string');
-            const parsed = JSON.parse(content);
-            targetArray.push(...normalize(parsed).map(extractUser));
+            targetArray.push(...normalize(JSON.parse(content)).map(extractUser));
         }
     };
 
@@ -58,8 +47,9 @@ export const processZipUpload = async (file) => {
     await parseZipFiles('following.json', rawData.following);
     await parseZipFiles('pending_follow_requests.json', rawData.pending);
 
-    if (rawData.followers.length === 0 && rawData.following.length === 0) {
-        throw new Error("Could not find data in this ZIP. Did you export 'followers_and_following'?");
+    // Fail-safe: No longer crashes if files are missing due to a partial date-range export
+    if (rawData.followers.length === 0 && rawData.following.length === 0 && rawData.pending.length === 0) {
+        throw new Error("No data found. Ensure you exported 'followers_and_following' from Instagram.");
     }
     return createSnapshot(rawData);
 };
@@ -77,25 +67,18 @@ export const processFolderUpload = async (filesArray) => {
     for (const file of filesArray) {
         const name = file.name;
         if (!name.endsWith('.json')) continue;
-
-        // Exact name checks
-        if (name === 'followers_1.json') {
-            rawData.followers.push(...normalize(await readFileAsync(file)).map(extractUser));
-        } else if (name === 'following.json') {
-            rawData.following.push(...normalize(await readFileAsync(file)).map(extractUser));
-        } else if (name === 'pending_follow_requests.json') {
-            rawData.pending.push(...normalize(await readFileAsync(file)).map(extractUser));
-        }
+        if (name === 'followers_1.json') rawData.followers.push(...normalize(await readFileAsync(file)).map(extractUser));
+        else if (name === 'following.json') rawData.following.push(...normalize(await readFileAsync(file)).map(extractUser));
+        else if (name === 'pending_follow_requests.json') rawData.pending.push(...normalize(await readFileAsync(file)).map(extractUser));
     }
 
-    if (rawData.followers.length === 0 && rawData.following.length === 0) {
-        throw new Error("Could not find Instagram connection files in this folder.");
+    if (rawData.followers.length === 0 && rawData.following.length === 0 && rawData.pending.length === 0) {
+        throw new Error("No data found. Please check your extracted folder.");
     }
     return createSnapshot(rawData);
 };
 
 const createSnapshot = ({ followers, following, pending }) => {
-    // Filter out 'unknowns' before executing the set math
     const validFollowers = followers.filter(u => u.username !== 'unknown');
     const validFollowing = following.filter(u => u.username !== 'unknown');
     const validPending = pending.filter(u => u.username !== 'unknown');
@@ -117,14 +100,7 @@ const createSnapshot = ({ followers, following, pending }) => {
             nonMutualCount: nonMutuals.length,
             pendingCount: validPending.length,
         },
-        data: {
-            followers: validFollowers,
-            following: validFollowing,
-            mutuals,
-            nonMutuals,
-            fans,
-            pending: validPending
-        }
+        data: { followers: validFollowers, following: validFollowing, mutuals, nonMutuals, fans, pending: validPending }
     };
 };
 
