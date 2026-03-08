@@ -1,6 +1,6 @@
 import React from 'react';
-import UserRow from '../UserRow';
-import { compareSnapshots } from '../processor';
+import UserRow from '../components/UserRow';
+import { compareSnapshots } from '../lib/processor';
 
 export default function Timeline({ snapshots }) {
     if (!snapshots || snapshots.length < 2) {

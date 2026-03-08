@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { FileArchive, FolderOpen, CheckCircle, UploadCloud, AlertCircle } from 'lucide-react';
-import { processZipUpload, processFolderUpload, compareSnapshots } from './processor';
+import { processZipUpload, processFolderUpload, compareSnapshots } from '../lib/processor';
 
 export default function Ingestion({ onIngest }) {
     const [isDragging, setIsDragging] = useState(false);

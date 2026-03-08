@@ -1,5 +1,5 @@
 import React from 'react';
-import UserRow from '../UserRow';
+import UserRow from '../components/UserRow';
 
 export default function ForgottenList({ snapshots }) {
     if (!snapshots || snapshots.length === 0) return <div className="text-zinc-500 text-center mt-20">No data available.</div>;

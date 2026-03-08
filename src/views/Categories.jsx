@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import UserRow from '../UserRow';
+import UserRow from '../components/UserRow';
 
 export default function Categories({ snapshots }) {
     const [activeTab, setActiveTab] = useState('nonMutuals');

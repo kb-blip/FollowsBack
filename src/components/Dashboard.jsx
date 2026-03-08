@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import StatsCard from './StatsCard';
 import UserRow from './UserRow';
-import { getMutualPercentage, compareSnapshots } from './processor';
+import { getMutualPercentage, compareSnapshots } from '../lib/processor';
 
 export default function Dashboard({ snapshots }) {
     const currentSnapshot = snapshots[snapshots.length - 1];

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import Sidebar from './Sidebar';
-import Dashboard from './Dashboard';
-import Ingestion from './Ingestion';
+import Sidebar from './components/Sidebar';
+import Dashboard from './components/Dashboard';
+import Ingestion from './components/Ingestion';
 import ForgottenList from './views/ForgottenList';
 import Timeline from './views/Timeline';
 import Categories from './views/Categories';
