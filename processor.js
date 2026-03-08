@@ -96,3 +96,43 @@ export const getMutualPercentage = (stats) => {
     if (!stats || stats.totalFollowing === 0) return 0;
     return ((stats.mutualCount / stats.totalFollowing) * 100).toFixed(1);
 };
+
+// Add this below your processZipUpload function
+export const processFolderUpload = async (filesArray) => {
+    const rawData = { followers: [], following: [], pending: [] };
+
+    const readFileAsync = (file) => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(JSON.parse(e.target.result));
+        reader.onerror = reject;
+        reader.readAsText(file);
+    });
+
+    const normalize = (data) => {
+        if (Array.isArray(data)) return data;
+        const keys = Object.keys(data);
+        if (keys.length === 1 && Array.isArray(data[keys[0]])) return data[keys[0]];
+        return [];
+    };
+
+    for (const file of filesArray) {
+        if (!file.name.endsWith('.json')) continue;
+
+        if (file.name.includes('followers_1')) {
+            const parsed = await readFileAsync(file);
+            rawData.followers.push(...normalize(parsed).map(extractUser));
+        } else if (file.name.includes('following')) {
+            const parsed = await readFileAsync(file);
+            rawData.following.push(...normalize(parsed).map(extractUser));
+        } else if (file.name.includes('pending_follow_requests')) {
+            const parsed = await readFileAsync(file);
+            rawData.pending.push(...normalize(parsed).map(extractUser));
+        }
+    }
+
+    if (rawData.followers.length === 0 && rawData.following.length === 0) {
+        throw new Error("Could not find Instagram connection files in this folder.");
+    }
+
+    return createSnapshot(rawData);
+};

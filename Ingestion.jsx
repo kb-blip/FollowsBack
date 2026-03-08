@@ -1,26 +1,56 @@
 import React, { useState } from 'react';
-import { Upload, FileArchive, CheckCircle } from 'lucide-react';
-import { processZipUpload, compareSnapshots } from './processor';
+import { FileArchive, CheckCircle, FolderOpen } from 'lucide-react';
+import { processZipUpload, processFolderUpload, compareSnapshots } from './processor';
 
 export default function Ingestion({ onIngest }) {
     const [isDragging, setIsDragging] = useState(false);
     const [processing, setProcessing] = useState(false);
     const [diffResult, setDiffResult] = useState(null);
 
-    const handleFiles = async (files) => {
-        if (!files || files.length === 0) return;
-        const file = files[0];
+    // Helper to recursively read dropped folders
+    const getDroppedFiles = async (items) => {
+        const files = [];
+        const queue = [];
 
-        if (!file.name.endsWith('.zip')) {
-            alert("Please upload the .zip file exported from Instagram.");
-            return;
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i].webkitGetAsEntry();
+            if (item) queue.push(item);
         }
 
+        while (queue.length > 0) {
+            const entry = queue.shift();
+            if (entry.isFile) {
+                const file = await new Promise(resolve => entry.file(resolve));
+                files.push(file);
+            } else if (entry.isDirectory) {
+                const dirReader = entry.createReader();
+                const entries = await new Promise(resolve => dirReader.readEntries(resolve));
+                queue.push(...entries);
+            }
+        }
+        return files;
+    };
+
+    const handleDrop = async (e) => {
+        e.preventDefault();
+        setIsDragging(false);
         setProcessing(true);
         setDiffResult(null);
 
         try {
-            const snapshot = await processZipUpload(file);
+            const files = await getDroppedFiles(e.dataTransfer.items);
+            if (files.length === 0) throw new Error("No files found.");
+
+            let snapshot;
+            const zipFile = files.find(f => f.name.endsWith('.zip'));
+
+            // Route logic based on file type
+            if (zipFile) {
+                snapshot = await processZipUpload(zipFile);
+            } else {
+                snapshot = await processFolderUpload(files);
+            }
+
             const previousSnapshot = onIngest(snapshot);
 
             if (previousSnapshot) {
@@ -30,7 +60,7 @@ export default function Ingestion({ onIngest }) {
             }
         } catch (error) {
             console.error("Ingestion failed", error);
-            alert("Failed to parse ZIP. Ensure it is a valid Instagram export.");
+            alert("Failed to parse data. Ensure you dropped a valid Instagram export folder or .zip.");
         } finally {
             setProcessing(false);
         }
@@ -40,21 +70,17 @@ export default function Ingestion({ onIngest }) {
         <div className="max-w-3xl mx-auto pt-12">
             <div className="mb-8">
                 <h2 className="text-2xl font-bold text-zinc-100">Data Ingestion</h2>
-                <p className="text-zinc-500 mt-2">Upload your <code className="text-rose-400">Instagram .zip export</code> here. All extraction and processing happens locally in your browser.</p>
+                <p className="text-zinc-500 mt-2">Drag and drop your <code className="text-rose-400">Instagram .zip</code> OR the unzipped <code className="text-rose-400">connections folder</code> here.</p>
             </div>
 
             <div
                 onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                 onDragLeave={() => setIsDragging(false)}
-                onDrop={(e) => {
-                    e.preventDefault();
-                    setIsDragging(false);
-                    handleFiles(e.dataTransfer.files);
-                }}
+                onDrop={handleDrop}
                 className={`
                     border-2 border-dashed rounded-2xl p-12 text-center transition-all duration-300
                     ${isDragging ? 'border-rose-500 bg-rose-500/5' : 'border-zinc-800 bg-zinc-900/30'}
-                    ${processing ? 'opacity-50 cursor-wait' : 'cursor-pointer hover:border-zinc-700'}
+                    ${processing ? 'opacity-50 cursor-wait' : 'hover:border-zinc-700'}
                 `}
             >
                 <div className="flex flex-col items-center gap-4">
@@ -62,24 +88,15 @@ export default function Ingestion({ onIngest }) {
                         {processing ? (
                             <div className="w-6 h-6 border-2 border-rose-500 border-t-transparent rounded-full animate-spin" />
                         ) : (
-                            <FileArchive className="text-zinc-400" size={24} />
+                            <FolderOpen className="text-zinc-400" size={24} />
                         )}
                     </div>
 
                     <div>
                         <p className="text-lg font-medium text-zinc-200">
-                            {processing ? 'Extracting & Crunching numbers...' : 'Drag & Drop your .zip file'}
+                            {processing ? 'Extracting & Crunching numbers...' : 'Drop your Folder or .zip file'}
                         </p>
                     </div>
-
-                    <input
-                        type="file"
-                        accept=".zip"
-                        className="hidden"
-                        onChange={(e) => handleFiles(e.target.files)}
-                        id="fileInput"
-                    />
-                    <label htmlFor="fileInput" className="absolute inset-0 cursor-pointer" />
                 </div>
             </div>
 
