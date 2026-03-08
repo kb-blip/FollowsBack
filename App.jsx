@@ -37,8 +37,9 @@ export default function App() {
         }
     };
 
+    // Note the bg-apple-bg and text-apple-text here
     return (
-        <div className="min-h-screen bg-[#09090b] text-zinc-100 font-sans flex">
+        <div className="min-h-screen bg-apple-bg text-apple-text font-sans flex selection:bg-apple-blue/20">
             <Sidebar currentView={currentView} setView={setView} />
             <main className="flex-1 ml-64 p-10 overflow-y-auto h-screen">
                 {renderView()}

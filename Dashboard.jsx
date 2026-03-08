@@ -2,12 +2,10 @@ import React, { useMemo } from 'react';
 import StatsCard from './StatsCard';
 import UserRow from './UserRow';
 import { getMutualPercentage, compareSnapshots } from './processor';
-import databaseSeed from './src/data/database.json';
 
 export default function Dashboard({ snapshots }) {
-    const sourceSnapshots = Array.isArray(snapshots) && snapshots.length > 0 ? snapshots : databaseSeed;
-    const currentSnapshot = sourceSnapshots[sourceSnapshots.length - 1];
-    const previousSnapshot = sourceSnapshots[sourceSnapshots.length - 2];
+    const currentSnapshot = snapshots[snapshots.length - 1];
+    const previousSnapshot = snapshots[snapshots.length - 2];
 
     const comparison = useMemo(() => {
         return compareSnapshots(previousSnapshot, currentSnapshot);
@@ -15,74 +13,47 @@ export default function Dashboard({ snapshots }) {
 
     if (!currentSnapshot) {
         return (
-            <div className="flex flex-col items-center justify-center h-[60vh] text-center">
-                <h2 className="text-xl font-bold text-zinc-200">No Data Available</h2>
-                <p className="text-zinc-500 mt-2">Go to Ingestion to upload your first snapshot.</p>
+            <div className="flex flex-col items-center justify-center h-[60vh] text-center animate-in fade-in">
+                <h2 className="text-2xl font-semibold text-apple-text">No Data Available</h2>
+                <p className="text-apple-muted mt-2">Go to Add Data to upload your first snapshot.</p>
             </div>
         );
     }
 
-    const stats = currentSnapshot.stats || {
-        totalFollowers: 0,
-        totalFollowing: 0,
-        mutualCount: 0,
-        nonMutualCount: 0,
-    };
+    const stats = currentSnapshot.stats || { totalFollowers: 0, totalFollowing: 0, mutualCount: 0, nonMutualCount: 0 };
     const data = currentSnapshot.data || {};
     const nonMutuals = Array.isArray(data.nonMutuals) ? data.nonMutuals : [];
 
     return (
-        <div className="max-w-6xl mx-auto space-y-8">
+        <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-500">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between pb-4 border-b border-apple-border">
                 <div>
-                    <h2 className="text-2xl font-bold text-zinc-100">The Pulse</h2>
-                    <p className="text-zinc-500 text-sm mt-1">Snapshot from {currentSnapshot.date ? new Date(currentSnapshot.date).toLocaleDateString() : 'Unknown date'}</p>
+                    <h2 className="text-3xl font-bold tracking-tight text-apple-text">The Pulse</h2>
+                    <p className="text-apple-muted text-sm mt-1">Snapshot from {currentSnapshot.date ? new Date(currentSnapshot.date).toLocaleDateString() : 'Unknown date'}</p>
                 </div>
-                {comparison.lost.length > 0 && (
-                    <div className="bg-rose-500/10 border border-rose-500/20 px-4 py-2 rounded-full text-rose-500 text-sm font-medium">
-                        -{comparison.lost.length} Followers since last sync
-                    </div>
-                )}
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatsCard
-                    title="Total Followers"
-                    value={stats.totalFollowers}
-                    trend={comparison.gained.length - comparison.lost.length}
-                    color="zinc"
-                />
-                <StatsCard
-                    title="Following"
-                    value={stats.totalFollowing}
-                    color="zinc"
-                />
-                <StatsCard
-                    title="Mutual Ratio"
-                    value={`${getMutualPercentage(stats)}%`}
-                    subtext="Accounts that follow you back"
-                    color="violet"
-                />
-                <StatsCard
-                    title="Non-Mutuals"
-                    value={stats.nonMutualCount}
-                    subtext="Following who don't follow back"
-                    color="rose"
-                />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                <StatsCard title="Total Followers" value={stats.totalFollowers} trend={comparison.gained.length - comparison.lost.length} />
+                <StatsCard title="Following" value={stats.totalFollowing} />
+                <StatsCard title="Mutual Ratio" value={`${getMutualPercentage(stats)}%`} subtext="Accounts that follow you back" />
+                <StatsCard title="Non-Mutuals" value={stats.nonMutualCount} subtext="Following who don't follow back" />
             </div>
 
             {/* Recent Non-Mutuals Preview */}
-            <div className="bg-zinc-950 border border-zinc-900 rounded-xl overflow-hidden">
-                <div className="p-4 border-b border-zinc-900 flex justify-between items-center bg-zinc-900/30">
-                    <h3 className="font-medium text-zinc-200">Top Non-Mutuals</h3>
-                    <button className="text-xs text-rose-500 hover:text-rose-400 font-medium">View All</button>
+            <div className="bg-white rounded-2xl shadow-sm border border-apple-border overflow-hidden">
+                <div className="p-5 border-b border-apple-border flex justify-between items-center bg-gray-50/50">
+                    <h3 className="font-semibold text-apple-text">Top Non-Mutuals</h3>
                 </div>
-                <div className="divide-y divide-zinc-900">
+                <div className="divide-y divide-apple-border">
                     {nonMutuals.slice(0, 5).map(user => (
                         <UserRow key={user.username} username={user.username} status="Non-Mutual" timestamp={user.timestamp} />
                     ))}
+                    {nonMutuals.length === 0 && (
+                        <div className="p-8 text-center text-apple-muted text-sm">You're completely caught up!</div>
+                    )}
                 </div>
             </div>
         </div>
