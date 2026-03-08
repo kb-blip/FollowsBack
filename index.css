@@ -3,8 +3,10 @@
 @tailwind utilities;
 
 body {
-    background-color: #09090b;
-    /* zinc-950 */
-    color: #f4f4f5;
-    /* zinc-100 */
+    background-color: #FBFBFD;
+    /* apple.bg */
+    color: #1D1D1F;
+    /* apple.text */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
