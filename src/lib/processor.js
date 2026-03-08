@@ -123,14 +123,18 @@ export const compareSnapshots = (oldSnap, newSnap) => {
 
     const oldFollowers = oldSnap?.data?.followers || [];
     const newFollowers = newSnap?.data?.followers || [];
+    const oldFollowing = oldSnap?.data?.following || [];
+    const newFollowing = newSnap?.data?.following || [];
 
     const newFollowerSet = new Set(newFollowers.map(u => u.username));
     const oldFollowerSet = new Set(oldFollowers.map(u => u.username));
+    const newFollowingSet = new Set(newFollowing.map(u => u.username));
+    const oldFollowingSet = new Set(oldFollowing.map(u => u.username));
 
     let rawLost = oldFollowers.filter(u => !newFollowerSet.has(u.username));
     let rawGained = newFollowers.filter(u => !oldFollowerSet.has(u.username));
 
-    // THE RENAMED ACCOUNT ENGINE
+    // THE RENAMED & DEACTIVATED ACCOUNT ENGINE
     const gainedByTimestamp = new Map();
     rawGained.forEach(u => {
         if (u.timestamp) gainedByTimestamp.set(u.timestamp, u.username);
@@ -138,11 +142,15 @@ export const compareSnapshots = (oldSnap, newSnap) => {
 
     const lost = [];
     rawLost.forEach(u => {
-        // If the exact follow timestamp matches someone new, they just changed their username
         if (u.timestamp && gainedByTimestamp.has(u.timestamp)) {
-            lost.push({ ...u, renamedTo: gainedByTimestamp.get(u.timestamp) });
+            // They changed their username
+            lost.push({ ...u, renamedTo: gainedByTimestamp.get(u.timestamp), status: 'Renamed' });
+        } else if (oldFollowingSet.has(u.username) && !newFollowingSet.has(u.username)) {
+            // They vanished from your Followers AND your Following simultaneously (Deactivated or Blocked)
+            lost.push({ ...u, status: 'Deactivated' });
         } else {
-            lost.push(u);
+            // Standard Unfollow
+            lost.push({ ...u, status: 'Unfollowed' });
         }
     });
 
