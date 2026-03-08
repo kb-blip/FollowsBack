@@ -11,12 +11,10 @@ export default function Categories({ snapshots }) {
     const currentData = snapshots[snapshots.length - 1]?.data || {};
     const nonMutuals = Array.isArray(currentData.nonMutuals) ? currentData.nonMutuals : [];
     const fans = Array.isArray(currentData.fans) ? currentData.fans : [];
-    const mutuals = Array.isArray(currentData.mutuals) ? currentData.mutuals : [];
 
     const tabs = [
         { id: 'nonMutuals', label: 'Not Following Back', count: nonMutuals.length, data: nonMutuals },
-        { id: 'fans', label: 'Fans', count: fans.length, data: fans },
-        { id: 'mutuals', label: 'Mutuals', count: mutuals.length, data: mutuals },
+        { id: 'fans', label: 'Fans (They follow you)', count: fans.length, data: fans }
     ];
 
     const activeTabData = tabs.find(t => t.id === activeTab)?.data || [];
@@ -28,15 +26,14 @@ export default function Categories({ snapshots }) {
                 <p className="text-apple-muted text-sm mt-1">Explore your social graph.</p>
             </div>
 
-            {/* Apple-style Segmented Control */}
             <div className="flex p-1 space-x-1 bg-gray-200/50 rounded-xl">
                 {tabs.map(tab => (
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
                         className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === tab.id
-                            ? 'bg-white text-apple-text shadow-sm'
-                            : 'text-apple-muted hover:text-apple-text'
+                                ? 'bg-white text-apple-text shadow-sm'
+                                : 'text-apple-muted hover:text-apple-text'
                             }`}
                     >
                         {tab.label}
@@ -52,7 +49,7 @@ export default function Categories({ snapshots }) {
                     <UserRow
                         key={user.username}
                         username={user.username}
-                        status={activeTab === 'mutuals' ? 'Mutual' : 'Non-Mutual'}
+                        status={activeTab === 'fans' ? 'Fan' : 'Non-Mutual'}
                         timestamp={user.timestamp}
                     />
                 ))}

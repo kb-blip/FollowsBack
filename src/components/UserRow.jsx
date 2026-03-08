@@ -3,8 +3,10 @@ import { ExternalLink } from 'lucide-react';
 
 export default function UserRow({ username, status, timestamp }) {
     const getStatusBadge = () => {
+        // Inside getStatusBadge()...
         if (status === 'Non-Mutual') return 'bg-rose-50 text-apple-rose border-rose-100';
-        if (status === 'Mutual') return 'bg-green-50 text-[#34C759] border-green-100';
+        if (status === 'Fan') return 'bg-purple-50 text-purple-600 border-purple-100';
+        if (status === 'Renamed') return 'bg-blue-50 text-blue-600 border-blue-100';
         if (status === 'Pending') return 'bg-amber-50 text-amber-600 border-amber-100';
         return 'bg-gray-100 text-apple-muted border-gray-200';
     };

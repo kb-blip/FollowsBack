@@ -1,31 +1,41 @@
 import JSZip from 'jszip';
 
-const extractUser = (item) => {
-    try {
-        if (item.string_list_data && item.string_list_data[0]) {
-            return {
-                username: item.string_list_data[0].value || "unknown",
-                timestamp: item.string_list_data[0].timestamp || null,
-            };
-        }
-        return { username: item.value || item.username || "unknown", timestamp: item.timestamp || null };
-    } catch (e) {
-        return { username: "unknown" };
-    }
-};
-
-const normalize = (data) => {
-    if (Array.isArray(data)) return data;
-    if (data && typeof data === 'object') {
-        let largestArray = [];
-        for (const key in data) {
-            if (Array.isArray(data[key]) && data[key].length > largestArray.length) {
-                largestArray = data[key];
+// Deep Crawler: Recursively hunts down Instagram's user records
+const extractAllStringListData = (obj, results = []) => {
+    if (!obj) return results;
+    if (Array.isArray(obj)) {
+        obj.forEach(item => extractAllStringListData(item, results));
+    } else if (typeof obj === 'object') {
+        if (obj.string_list_data) {
+            results.push(obj);
+        } else {
+            for (const key in obj) {
+                extractAllStringListData(obj[key], results);
             }
         }
-        return largestArray;
     }
-    return [];
+    return results;
+};
+
+// Extracts the username, falling back to parsing the URL if Instagram removed it
+const extractUser = (item) => {
+    try {
+        const data = item.string_list_data[0];
+        let username = data.value;
+
+        if (!username && data.href) {
+            // Parses "https://www.instagram.com/_u/username" into "username"
+            const parts = data.href.split('?')[0].split('/').filter(Boolean);
+            username = parts[parts.length - 1];
+        }
+
+        return {
+            username: username || "unknown",
+            timestamp: data.timestamp || null,
+        };
+    } catch (e) {
+        return { username: "unknown", timestamp: null };
+    }
 };
 
 export const processZipUpload = async (file) => {
@@ -33,21 +43,19 @@ export const processZipUpload = async (file) => {
     const unzipped = await zip.loadAsync(file);
     const rawData = { followers: [], following: [], pending: [] };
 
-    const parseZipFiles = async (exactFilename, targetArray) => {
-        const filePaths = Object.keys(unzipped.files).filter(name =>
-            name.endsWith(`/${exactFilename}`) || name === exactFilename
-        );
+    const parseZipFiles = async (fileMatchLogic, targetArray) => {
+        const filePaths = Object.keys(unzipped.files).filter(fileMatchLogic);
         for (const path of filePaths) {
             const content = await unzipped.files[path].async('string');
-            targetArray.push(...normalize(JSON.parse(content)).map(extractUser));
+            const records = extractAllStringListData(JSON.parse(content));
+            targetArray.push(...records.map(extractUser));
         }
     };
 
-    await parseZipFiles('followers_1.json', rawData.followers);
-    await parseZipFiles('following.json', rawData.following);
-    await parseZipFiles('pending_follow_requests.json', rawData.pending);
+    await parseZipFiles(name => name.includes('/followers_') && name.endsWith('.json'), rawData.followers);
+    await parseZipFiles(name => name.endsWith('/following.json') || name === 'following.json', rawData.following);
+    await parseZipFiles(name => name.endsWith('/pending_follow_requests.json') || name === 'pending_follow_requests.json', rawData.pending);
 
-    // Fail-safe: No longer crashes if files are missing due to a partial date-range export
     if (rawData.followers.length === 0 && rawData.following.length === 0 && rawData.pending.length === 0) {
         throw new Error("No data found. Ensure you exported 'followers_and_following' from Instagram.");
     }
@@ -67,9 +75,17 @@ export const processFolderUpload = async (filesArray) => {
     for (const file of filesArray) {
         const name = file.name;
         if (!name.endsWith('.json')) continue;
-        if (name === 'followers_1.json') rawData.followers.push(...normalize(await readFileAsync(file)).map(extractUser));
-        else if (name === 'following.json') rawData.following.push(...normalize(await readFileAsync(file)).map(extractUser));
-        else if (name === 'pending_follow_requests.json') rawData.pending.push(...normalize(await readFileAsync(file)).map(extractUser));
+
+        if (name.startsWith('followers_')) {
+            const records = extractAllStringListData(await readFileAsync(file));
+            rawData.followers.push(...records.map(extractUser));
+        } else if (name === 'following.json') {
+            const records = extractAllStringListData(await readFileAsync(file));
+            rawData.following.push(...records.map(extractUser));
+        } else if (name === 'pending_follow_requests.json') {
+            const records = extractAllStringListData(await readFileAsync(file));
+            rawData.pending.push(...records.map(extractUser));
+        }
     }
 
     if (rawData.followers.length === 0 && rawData.following.length === 0 && rawData.pending.length === 0) {
@@ -88,7 +104,6 @@ const createSnapshot = ({ followers, following, pending }) => {
 
     const nonMutuals = validFollowing.filter(u => !followerSet.has(u.username));
     const fans = validFollowers.filter(u => !followingSet.has(u.username));
-    const mutuals = validFollowing.filter(u => followerSet.has(u.username));
 
     return {
         id: Date.now(),
@@ -96,26 +111,40 @@ const createSnapshot = ({ followers, following, pending }) => {
         stats: {
             totalFollowers: validFollowers.length,
             totalFollowing: validFollowing.length,
-            mutualCount: mutuals.length,
             nonMutualCount: nonMutuals.length,
             pendingCount: validPending.length,
         },
-        data: { followers: validFollowers, following: validFollowing, mutuals, nonMutuals, fans, pending: validPending }
+        data: { followers: validFollowers, following: validFollowing, nonMutuals, fans, pending: validPending }
     };
 };
 
 export const compareSnapshots = (oldSnap, newSnap) => {
-    if (!oldSnap || !newSnap) return { lost: [], gained: [], churnRate: 0 };
-    const newFollowerSet = new Set(newSnap.data.followers.map(u => u.username));
-    const oldFollowerSet = new Set(oldSnap.data.followers.map(u => u.username));
+    if (!oldSnap || !newSnap) return { lost: [], gained: [] };
 
-    const lostFollowers = oldSnap.data.followers.filter(u => !newFollowerSet.has(u.username));
-    const newFollowers = newSnap.data.followers.filter(u => !oldFollowerSet.has(u.username));
+    const oldFollowers = oldSnap?.data?.followers || [];
+    const newFollowers = newSnap?.data?.followers || [];
 
-    return { lost: lostFollowers, gained: newFollowers };
-};
+    const newFollowerSet = new Set(newFollowers.map(u => u.username));
+    const oldFollowerSet = new Set(oldFollowers.map(u => u.username));
 
-export const getMutualPercentage = (stats) => {
-    if (!stats || stats.totalFollowing === 0) return 0;
-    return ((stats.mutualCount / stats.totalFollowing) * 100).toFixed(1);
+    let rawLost = oldFollowers.filter(u => !newFollowerSet.has(u.username));
+    let rawGained = newFollowers.filter(u => !oldFollowerSet.has(u.username));
+
+    // THE RENAMED ACCOUNT ENGINE
+    const gainedByTimestamp = new Map();
+    rawGained.forEach(u => {
+        if (u.timestamp) gainedByTimestamp.set(u.timestamp, u.username);
+    });
+
+    const lost = [];
+    rawLost.forEach(u => {
+        // If the exact follow timestamp matches someone new, they just changed their username
+        if (u.timestamp && gainedByTimestamp.has(u.timestamp)) {
+            lost.push({ ...u, renamedTo: gainedByTimestamp.get(u.timestamp) });
+        } else {
+            lost.push(u);
+        }
+    });
+
+    return { lost, gained: rawGained };
 };

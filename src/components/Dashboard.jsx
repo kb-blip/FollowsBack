@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import StatsCard from './StatsCard';
 import UserRow from './UserRow';
-import { getMutualPercentage, compareSnapshots } from '../lib/processor';
+import { compareSnapshots } from '../lib/processor';
 
 export default function Dashboard({ snapshots }) {
     const currentSnapshot = snapshots[snapshots.length - 1];
@@ -35,11 +35,10 @@ export default function Dashboard({ snapshots }) {
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                 <StatsCard title="Total Followers" value={stats.totalFollowers} trend={comparison.gained.length - comparison.lost.length} />
                 <StatsCard title="Following" value={stats.totalFollowing} />
-                <StatsCard title="Mutual Ratio" value={`${getMutualPercentage(stats)}%`} subtext="Accounts that follow you back" />
-                <StatsCard title="Non-Mutuals" value={stats.nonMutualCount} subtext="Following who don't follow back" />
+                <StatsCard title="Not Following Back" value={stats.nonMutualCount} subtext="Accounts you follow that don't follow back" />
             </div>
 
             {/* Recent Non-Mutuals Preview */}
