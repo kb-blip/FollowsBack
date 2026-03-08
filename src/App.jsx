@@ -5,6 +5,7 @@ import Ingestion from './components/Ingestion';
 import ForgottenList from './views/ForgottenList';
 import Timeline from './views/Timeline';
 import Categories from './views/Categories';
+import { recalculateTimeline } from './lib/processor';
 
 export default function App() {
     const [currentView, setView] = useState('dashboard');
@@ -25,8 +26,9 @@ export default function App() {
     }, []);
 
     const handleIngest = async (newSnapshot) => {
-        const previousSnapshot = snapshots[snapshots.length - 1] || null;
-        const updatedSnapshots = [...snapshots, newSnapshot];
+        const isFirst = snapshots.length === 0;
+        let updatedSnapshots = [...snapshots, newSnapshot];
+        updatedSnapshots = recalculateTimeline(updatedSnapshots);
 
         setSnapshots(updatedSnapshots);
 
@@ -36,7 +38,12 @@ export default function App() {
             body: JSON.stringify(updatedSnapshots, null, 2)
         });
 
-        return previousSnapshot;
+        const integratedSnap = updatedSnapshots.find(s => s.id === newSnapshot.id);
+        return {
+             isFirst,
+             diff: integratedSnap?.diff || { lost: [], gained: [] },
+             total: newSnapshot.stats.totalFollowers
+        };
     };
 
     const renderView = () => {

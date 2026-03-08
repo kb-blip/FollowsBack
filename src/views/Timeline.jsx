@@ -1,6 +1,7 @@
 import React from 'react';
 import { compareSnapshots } from '../lib/processor';
-import { Clock, ArrowRight, UserMinus, UserX, AlertCircle, ExternalLink } from 'lucide-react';
+import { Clock, ArrowRight, UserMinus, UserX, AlertCircle, ExternalLink, CalendarDays } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
 
 export default function Timeline({ snapshots }) {
     if (!snapshots || snapshots.length < 2) {
@@ -48,7 +49,7 @@ export default function Timeline({ snapshots }) {
                                 {/* Username Info Block */}
                                 <div className="flex flex-col">
                                     <div className="flex items-center gap-2">
-                                        <span className={`font-semibold text-sm ${user.status === 'Deactivated' ? 'text-apple-muted line-through opacity-70' : 'text-apple-text'}`}>
+                                        <span className={`font-semibold text-sm ${user.status === 'Deactivated' ? 'text-apple-muted opacity-70' : 'text-apple-text'}`}>
                                             @{user.username}
                                         </span>
                                         {user.status === 'Renamed' && (
@@ -58,9 +59,17 @@ export default function Timeline({ snapshots }) {
                                             </>
                                         )}
                                     </div>
-                                    <span className="text-apple-muted text-xs mt-0.5">
-                                        Followed you on {user.timestamp ? new Date(user.timestamp * 1000).toLocaleDateString() : 'Unknown date'}
-                                    </span>
+                                    <div className="flex flex-col gap-0.5 mt-0.5">
+                                        <span className="text-apple-muted text-[11px] flex items-center gap-1">
+                                            <CalendarDays size={12} />
+                                            Followed you on {user.timestamp ? new Date(user.timestamp * 1000).toLocaleDateString() : 'Unknown date'}
+                                        </span>
+                                        {user.actionDate && (
+                                            <span className="text-gray-400 text-[11px]">
+                                                {user.status === 'Renamed' ? 'Renamed' : user.status === 'Deactivated' ? 'Deactivated' : 'Unfollowed'} {formatDistanceToNow(new Date(user.actionDate), { addSuffix: true })} ({new Date(user.actionDate).toLocaleDateString()})
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 

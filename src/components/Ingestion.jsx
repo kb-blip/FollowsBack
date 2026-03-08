@@ -21,13 +21,19 @@ export default function Ingestion({ onIngest }) {
         setDiffResult(null);
 
         try {
-            let snapshot;
+            let snapshots = [];
             if (type === 'zip') {
-                snapshot = await processZipUpload(files[0]);
+                for (const file of files) {
+                    snapshots.push(await processZipUpload(file));
+                }
             } else {
-                snapshot = await processFolderUpload(Array.from(files));
+                snapshots.push(await processFolderUpload(Array.from(files)));
             }
-            processSuccess(snapshot);
+            
+            // Re-run success logic on the last snapshot simply for the diff display
+            if (snapshots.length > 0) {
+               await processSuccess(snapshots[snapshots.length - 1]);
+            }
         } catch (err) {
             setError(err.message || "Failed to process the data.");
         } finally {
@@ -47,15 +53,23 @@ export default function Ingestion({ onIngest }) {
             const files = await getDroppedFiles(e.dataTransfer.items);
             if (files.length === 0) throw new Error("No files found.");
 
-            let snapshot;
-            const zipFile = files.find(f => f.name.endsWith('.zip'));
+            let snapshots = [];
+            const zipFiles = files.filter(f => f.name.endsWith('.zip'));
+            const extractedFiles = files.filter(f => !f.name.endsWith('.zip') && !f.name.startsWith('.'));
 
-            if (zipFile) {
-                snapshot = await processZipUpload(zipFile);
-            } else {
-                snapshot = await processFolderUpload(files);
+            if (zipFiles.length > 0) {
+                for (const file of zipFiles) {
+                    snapshots.push(await processZipUpload(file));
+                }
             }
-            processSuccess(snapshot);
+            if (extractedFiles.length > 0) {
+                // Assuming it's a single export folder payload dropped correctly
+                snapshots.push(await processFolderUpload(extractedFiles));
+            }
+            
+            if (snapshots.length > 0) {
+                await processSuccess(snapshots[snapshots.length - 1]);
+            }
         } catch (err) {
             setError("Invalid format. Please drop a valid Instagram export.");
         } finally {
@@ -63,12 +77,12 @@ export default function Ingestion({ onIngest }) {
         }
     };
 
-    const processSuccess = (snapshot) => {
-        const previousSnapshot = onIngest(snapshot);
-        if (previousSnapshot) {
-            setDiffResult(compareSnapshots(previousSnapshot, snapshot));
+    const processSuccess = async (snapshot) => {
+        const result = await onIngest(snapshot);
+        if (result.isFirst) {
+            setDiffResult({ firstUpload: true, total: result.total });
         } else {
-            setDiffResult({ firstUpload: true, total: snapshot.stats.totalFollowers });
+            setDiffResult(result.diff);
         }
     };
 
@@ -146,8 +160,8 @@ export default function Ingestion({ onIngest }) {
                         className="flex flex-col items-center gap-2 p-6 hover:bg-white transition-colors cursor-pointer group"
                     >
                         <FileArchive className="text-apple-blue opacity-80 group-hover:opacity-100 transition-opacity" size={24} />
-                        <span className="text-sm font-medium text-apple-text">Select .ZIP Archive</span>
-                        <input type="file" accept=".zip" className="hidden" ref={zipInputRef} onChange={(e) => handleFileInput(e, 'zip')} />
+                        <span className="text-sm font-medium text-apple-text">Select .ZIP Archive(s)</span>
+                        <input type="file" accept=".zip" multiple className="hidden" ref={zipInputRef} onChange={(e) => handleFileInput(e, 'zip')} />
                     </button>
 
                     <button

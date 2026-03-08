@@ -94,6 +94,17 @@ export const processFolderUpload = async (filesArray) => {
     return createSnapshot(rawData);
 };
 
+const getMaxDate = (arrays) => {
+    let maxTs = 0;
+    arrays.forEach(arr => {
+        arr.forEach(u => {
+            if (u.timestamp > maxTs) maxTs = u.timestamp;
+        });
+    });
+    if (maxTs === 0) return Date.now();
+    return maxTs < 1e12 ? maxTs * 1000 : maxTs;
+};
+
 const createSnapshot = ({ followers, following, pending }) => {
     const validFollowers = followers.filter(u => u.username !== 'unknown');
     const validFollowing = following.filter(u => u.username !== 'unknown');
@@ -105,9 +116,11 @@ const createSnapshot = ({ followers, following, pending }) => {
     const nonMutuals = validFollowing.filter(u => !followerSet.has(u.username));
     const fans = validFollowers.filter(u => !followingSet.has(u.username));
 
+    const timestampMs = getMaxDate([validFollowers, validFollowing, validPending]);
+
     return {
-        id: Date.now(),
-        date: new Date().toISOString(),
+        id: timestampMs,
+        date: new Date(timestampMs).toISOString(),
         stats: {
             totalFollowers: validFollowers.length,
             totalFollowing: validFollowing.length,
@@ -144,15 +157,30 @@ export const compareSnapshots = (oldSnap, newSnap) => {
     rawLost.forEach(u => {
         if (u.timestamp && gainedByTimestamp.has(u.timestamp)) {
             // They changed their username
-            lost.push({ ...u, renamedTo: gainedByTimestamp.get(u.timestamp), status: 'Renamed' });
+            lost.push({ ...u, renamedTo: gainedByTimestamp.get(u.timestamp), status: 'Renamed', actionDate: newSnap.date });
         } else if (oldFollowingSet.has(u.username) && !newFollowingSet.has(u.username)) {
             // They vanished from your Followers AND your Following simultaneously (Deactivated or Blocked)
-            lost.push({ ...u, status: 'Deactivated' });
+            lost.push({ ...u, status: 'Deactivated', actionDate: newSnap.date });
         } else {
             // Standard Unfollow
-            lost.push({ ...u, status: 'Unfollowed' });
+            lost.push({ ...u, status: 'Unfollowed', actionDate: newSnap.date });
         }
     });
 
     return { lost, gained: rawGained };
+};
+
+export const recalculateTimeline = (snapshots) => {
+    // Sort array by date chronologically
+    const sorted = [...snapshots].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
+    // Rebuild diffs for each except the first one
+    return sorted.map((snap, i) => {
+        if (i === 0) {
+            snap.diff = { lost: [], gained: [] };
+        } else {
+            snap.diff = compareSnapshots(sorted[i - 1], snap);
+        }
+        return snap;
+    });
 };

@@ -40,7 +40,65 @@ function uniqueByUsername(users) {
     return Array.from(map.values());
 }
 
-function buildSnapshot({ followers, following, pending, previousSnapshot }) {
+function getMaxDate(arrays) {
+    let maxTs = 0;
+    arrays.forEach(arr => {
+        arr.forEach(u => {
+            if (u.timestamp > maxTs) maxTs = u.timestamp;
+        });
+    });
+    if (maxTs === 0) return Date.now();
+    return maxTs < 1e12 ? maxTs * 1000 : maxTs;
+}
+
+function compareSnapshots(oldSnap, newSnap) {
+    if (!oldSnap || !newSnap) return { lost: [], gained: [] };
+
+    const oldFollowers = oldSnap?.data?.followers || [];
+    const newFollowers = newSnap?.data?.followers || [];
+    const oldFollowing = oldSnap?.data?.following || [];
+    const newFollowing = newSnap?.data?.following || [];
+
+    const newFollowerSet = new Set(newFollowers.map(u => u.username));
+    const oldFollowerSet = new Set(oldFollowers.map(u => u.username));
+    const newFollowingSet = new Set(newFollowing.map(u => u.username));
+    const oldFollowingSet = new Set(oldFollowing.map(u => u.username));
+
+    let rawLost = oldFollowers.filter(u => !newFollowerSet.has(u.username));
+    let rawGained = newFollowers.filter(u => !oldFollowerSet.has(u.username));
+
+    const gainedByTimestamp = new Map();
+    rawGained.forEach(u => {
+        if (u.timestamp) gainedByTimestamp.set(u.timestamp, u.username);
+    });
+
+    const lost = [];
+    rawLost.forEach(u => {
+        if (u.timestamp && gainedByTimestamp.has(u.timestamp)) {
+            lost.push({ ...u, renamedTo: gainedByTimestamp.get(u.timestamp), status: 'Renamed' });
+        } else if (oldFollowingSet.has(u.username) && !newFollowingSet.has(u.username)) {
+            lost.push({ ...u, status: 'Deactivated' });
+        } else {
+            lost.push({ ...u, status: 'Unfollowed' });
+        }
+    });
+
+    return { lost, gained: rawGained };
+}
+
+function recalculateTimeline(snapshots) {
+    const sorted = [...snapshots].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    return sorted.map((snap, i) => {
+        if (i === 0) {
+            snap.diff = { lost: [], gained: [] };
+        } else {
+            snap.diff = compareSnapshots(sorted[i - 1], snap);
+        }
+        return snap;
+    });
+}
+
+function buildSnapshot({ followers, following, pending }) {
     const followerSet = new Set(followers.map((u) => u.username));
     const followingSet = new Set(following.map((u) => u.username));
 
@@ -48,16 +106,11 @@ function buildSnapshot({ followers, following, pending, previousSnapshot }) {
     const fans = followers.filter((u) => !followingSet.has(u.username));
     const mutuals = following.filter((u) => followerSet.has(u.username));
 
-    const oldFollowers = previousSnapshot?.data?.followers || [];
-    const oldFollowerSet = new Set(oldFollowers.map((u) => u.username));
-
-    const unfollowers = oldFollowers.filter((u) => !followerSet.has(u.username));
-    const newFollowers = followers.filter((u) => !oldFollowerSet.has(u.username));
-
-    const now = new Date();
+    const ts = getMaxDate([followers, following, pending]);
+    const now = new Date(ts);
 
     return {
-        id: now.getTime(),
+        id: ts,
         date: now.toISOString(),
         stats: {
             totalFollowers: followers.length,
@@ -65,10 +118,8 @@ function buildSnapshot({ followers, following, pending, previousSnapshot }) {
             mutualCount: mutuals.length,
             nonMutualCount: nonMutuals.length,
             pendingCount: pending.length,
-            unfollowersCount: unfollowers.length,
-            newFollowersCount: newFollowers.length,
         },
-        diff: { unfollowers, newFollowers },
+        diff: { lost: [], gained: [] },
         data: { followers, following, nonMutuals, fans, pending },
     };
 }
@@ -139,17 +190,16 @@ async function processItem(itemPath) {
         ]);
 
         const database = await loadDatabase();
-        const latestSnapshot = database.length > 0 ? database[database.length - 1] : null;
 
         const snapshot = buildSnapshot({
             followers: uniqueByUsername(followersRaw),
             following: uniqueByUsername(followingRaw),
             pending: uniqueByUsername(pendingRaw),
-            previousSnapshot: latestSnapshot,
         });
 
         database.push(snapshot);
-        await fs.writeJson(DATABASE_FILE, database, { spaces: 2 });
+        const sortedDatabase = recalculateTimeline(database);
+        await fs.writeJson(DATABASE_FILE, sortedDatabase, { spaces: 2 });
 
         // Clean up the dropped file/folder entirely
         await fs.remove(itemPath);
