@@ -8,3 +8,4 @@ pnpm-debug.log*
 
 # Local Database
 src/data/database.json
+/data

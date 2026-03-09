@@ -5,6 +5,7 @@ import Ingestion from './components/Ingestion';
 import ForgottenList from './views/ForgottenList';
 import Timeline from './views/Timeline';
 import Categories from './views/Categories';
+import Search from './views/Search';
 import { recalculateTimeline } from './lib/processor';
 
 export default function App() {
@@ -25,24 +26,30 @@ export default function App() {
             });
     }, []);
 
-    const handleIngest = async (newSnapshot) => {
+    const handleIngest = async (incomingSnapshots) => {
         const isFirst = snapshots.length === 0;
-        let updatedSnapshots = [...snapshots, newSnapshot];
+        
+        // Ensure incoming is an array to handle mass drop arrays
+        const payload = Array.isArray(incomingSnapshots) ? incomingSnapshots : [incomingSnapshots];
+        
+        let updatedSnapshots = [...snapshots, ...payload];
         updatedSnapshots = recalculateTimeline(updatedSnapshots);
 
         setSnapshots(updatedSnapshots);
 
-        // FIX: Added 'null, 2' to pretty-print the JSON so it's highly readable in your editor!
         await fetch('/api/save', {
             method: 'POST',
             body: JSON.stringify(updatedSnapshots, null, 2)
         });
 
-        const integratedSnap = updatedSnapshots.find(s => s.id === newSnapshot.id);
+        // Use the last snapshot chronologically for the diff summary dialog
+        const latestImportId = payload[payload.length - 1].id;
+        const integratedSnap = updatedSnapshots.find(s => s.id === latestImportId);
+        
         return {
              isFirst,
              diff: integratedSnap?.diff || { lost: [], gained: [] },
-             total: newSnapshot.stats.totalFollowers
+             total: payload[0].stats.totalFollowers
         };
     };
 
@@ -52,6 +59,7 @@ export default function App() {
             case 'pending': return <ForgottenList snapshots={snapshots} />;
             case 'timeline': return <Timeline snapshots={snapshots} />;
             case 'categories': return <Categories snapshots={snapshots} />;
+            case 'search': return <Search snapshots={snapshots} />;
             case 'dashboard':
             default: return <Dashboard snapshots={snapshots} />;
         }

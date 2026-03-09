@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import StatsCard from './StatsCard';
 import UserRow from './UserRow';
+import GrowthChart from './GrowthChart';
 import { compareSnapshots } from '../lib/processor';
 
 export default function Dashboard({ snapshots }) {
@@ -40,6 +41,8 @@ export default function Dashboard({ snapshots }) {
                 <StatsCard title="Following" value={stats.totalFollowing} />
                 <StatsCard title="Not Following Back" value={stats.nonMutualCount} subtext="Accounts you follow that don't follow back" />
             </div>
+
+            <GrowthChart snapshots={snapshots} />
 
             {/* Recent Non-Mutuals Preview */}
             <div className="bg-white rounded-2xl shadow-sm border border-apple-border overflow-hidden">

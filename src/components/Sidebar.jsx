@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, UploadCloud, Clock, UserMinus, FolderGit2 } from 'lucide-react';
+import { Activity, UploadCloud, Clock, UserMinus, FolderGit2, Search } from 'lucide-react';
 
 const NavItem = ({ icon: Icon, label, active, onClick }) => (
     <button onClick={onClick} className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm rounded-xl transition-all duration-200 font-medium ${active
@@ -24,6 +24,7 @@ export default function Sidebar({ currentView, setView }) {
             </div>
             <nav className="flex-1 px-3 space-y-1">
                 <NavItem icon={Activity} label="The Pulse" active={currentView === 'dashboard'} onClick={() => setView('dashboard')} />
+                <NavItem icon={Search} label="Global Search" active={currentView === 'search'} onClick={() => setView('search')} />
                 <NavItem icon={UploadCloud} label="Add Data" active={currentView === 'ingestion'} onClick={() => setView('ingestion')} />
                 <NavItem icon={Clock} label="Timeline" active={currentView === 'timeline'} onClick={() => setView('timeline')} />
                 <NavItem icon={FolderGit2} label="Categories" active={currentView === 'categories'} onClick={() => setView('categories')} />

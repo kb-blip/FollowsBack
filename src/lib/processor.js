@@ -38,15 +38,29 @@ const extractUser = (item) => {
     }
 };
 
+const uniqueByUsername = (users) => {
+    const map = new Map();
+    users.forEach((user) => {
+        if (!map.has(user.username)) map.set(user.username, user);
+    });
+    return Array.from(map.values());
+};
+
 export const processZipUpload = async (file) => {
     const zip = new JSZip();
     const unzipped = await zip.loadAsync(file);
     const rawData = { followers: [], following: [], pending: [] };
 
+    let maxDate = 0;
+
     const parseZipFiles = async (fileMatchLogic, targetArray) => {
         const filePaths = Object.keys(unzipped.files).filter(fileMatchLogic);
         for (const path of filePaths) {
-            const content = await unzipped.files[path].async('string');
+            const entry = unzipped.files[path];
+            if (entry.date && entry.date.getTime() > maxDate) {
+                maxDate = entry.date.getTime();
+            }
+            const content = await entry.async('string');
             const records = extractAllStringListData(JSON.parse(content));
             targetArray.push(...records.map(extractUser));
         }
@@ -59,11 +73,18 @@ export const processZipUpload = async (file) => {
     if (rawData.followers.length === 0 && rawData.following.length === 0 && rawData.pending.length === 0) {
         throw new Error("No data found. Ensure you exported 'followers_and_following' from Instagram.");
     }
-    return createSnapshot(rawData);
+    return createSnapshot(rawData, maxDate > 0 ? maxDate : null);
 };
 
 export const processFolderUpload = async (filesArray) => {
-    const rawData = { followers: [], following: [], pending: [] };
+    // Group files by top-level directory payload
+    const grouped = {};
+    for (const file of filesArray) {
+        if (!file.webkitRelativePath) continue;
+        const topLevel = file.webkitRelativePath.split('/')[0];
+        if (!grouped[topLevel]) grouped[topLevel] = [];
+        grouped[topLevel].push(file);
+    }
 
     const readFileAsync = (file) => new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -72,43 +93,48 @@ export const processFolderUpload = async (filesArray) => {
         reader.readAsText(file);
     });
 
-    for (const file of filesArray) {
-        const name = file.name;
-        if (!name.endsWith('.json')) continue;
+    const parsedSnapshots = [];
 
-        if (name.startsWith('followers_')) {
-            const records = extractAllStringListData(await readFileAsync(file));
-            rawData.followers.push(...records.map(extractUser));
-        } else if (name === 'following.json') {
-            const records = extractAllStringListData(await readFileAsync(file));
-            rawData.following.push(...records.map(extractUser));
-        } else if (name === 'pending_follow_requests.json') {
-            const records = extractAllStringListData(await readFileAsync(file));
-            rawData.pending.push(...records.map(extractUser));
+    for (const [folderName, groupFiles] of Object.entries(grouped)) {
+        const rawData = { followers: [], following: [], pending: [] };
+        let maxDate = 0;
+        
+        for (const file of groupFiles) {
+            if (file.lastModified && file.lastModified > maxDate) {
+                maxDate = file.lastModified;
+            }
+            const name = file.name;
+            if (!name.endsWith('.json')) continue;
+
+            if (name.startsWith('followers_')) {
+                const records = extractAllStringListData(await readFileAsync(file));
+                rawData.followers.push(...records.map(extractUser));
+            } else if (name === 'following.json') {
+                const records = extractAllStringListData(await readFileAsync(file));
+                rawData.following.push(...records.map(extractUser));
+            } else if (name === 'pending_follow_requests.json') {
+                const records = extractAllStringListData(await readFileAsync(file));
+                rawData.pending.push(...records.map(extractUser));
+            }
+        }
+        
+        if (rawData.followers.length > 0 || rawData.following.length > 0) {
+            parsedSnapshots.push(createSnapshot(rawData, maxDate > 0 ? maxDate : null));
         }
     }
 
-    if (rawData.followers.length === 0 && rawData.following.length === 0 && rawData.pending.length === 0) {
+    if (parsedSnapshots.length === 0) {
         throw new Error("No data found. Please check your extracted folder.");
     }
-    return createSnapshot(rawData);
+    
+    return parsedSnapshots;
 };
 
-const getMaxDate = (arrays) => {
-    let maxTs = 0;
-    arrays.forEach(arr => {
-        arr.forEach(u => {
-            if (u.timestamp > maxTs) maxTs = u.timestamp;
-        });
-    });
-    if (maxTs === 0) return Date.now();
-    return maxTs < 1e12 ? maxTs * 1000 : maxTs;
-};
-
-const createSnapshot = ({ followers, following, pending }) => {
-    const validFollowers = followers.filter(u => u.username !== 'unknown');
-    const validFollowing = following.filter(u => u.username !== 'unknown');
-    const validPending = pending.filter(u => u.username !== 'unknown');
+const createSnapshot = ({ followers, following, pending }, dateHint = null) => {
+    // Deduplicate upfront before assembling arrays
+    const validFollowers = uniqueByUsername(followers.filter(u => u.username !== 'unknown'));
+    const validFollowing = uniqueByUsername(following.filter(u => u.username !== 'unknown'));
+    const validPending = uniqueByUsername(pending.filter(u => u.username !== 'unknown'));
 
     const followerSet = new Set(validFollowers.map(u => u.username));
     const followingSet = new Set(validFollowing.map(u => u.username));
@@ -116,7 +142,7 @@ const createSnapshot = ({ followers, following, pending }) => {
     const nonMutuals = validFollowing.filter(u => !followerSet.has(u.username));
     const fans = validFollowers.filter(u => !followingSet.has(u.username));
 
-    const timestampMs = getMaxDate([validFollowers, validFollowing, validPending]);
+    const timestampMs = dateHint || Date.now();
 
     return {
         id: timestampMs,

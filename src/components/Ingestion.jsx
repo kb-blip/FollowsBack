@@ -27,7 +27,7 @@ export default function Ingestion({ onIngest }) {
                     snapshots.push(await processZipUpload(file));
                 }
             } else {
-                snapshots.push(await processFolderUpload(Array.from(files)));
+                snapshots.push(...(await processFolderUpload(Array.from(files))));
             }
             
             // Re-run success logic on the last snapshot simply for the diff display
@@ -64,7 +64,7 @@ export default function Ingestion({ onIngest }) {
             }
             if (extractedFiles.length > 0) {
                 // Assuming it's a single export folder payload dropped correctly
-                snapshots.push(await processFolderUpload(extractedFiles));
+                snapshots.push(...(await processFolderUpload(extractedFiles)));
             }
             
             if (snapshots.length > 0) {

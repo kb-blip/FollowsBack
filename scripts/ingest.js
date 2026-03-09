@@ -5,9 +5,23 @@ const AdmZip = require('adm-zip');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 const DATA_DIR = path.join(ROOT_DIR, 'data');
+const DATA_TEMP = path.join(DATA_DIR, '.temp');
 const DATABASE_FILE = path.join(ROOT_DIR, 'src', 'data', 'database.json');
 
 const inflight = new Set();
+let isDatabaseLocked = false;
+
+// Simple promise-based Mutex lock to prevent JSON corruption during bulk processing
+async function acquireDatabaseLock() {
+    while (isDatabaseLocked) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    isDatabaseLocked = true;
+}
+
+function releaseDatabaseLock() {
+    isDatabaseLocked = false;
+}
 
 function extractUser(item) {
     if (!item || typeof item !== 'object') return { username: 'unknown' };
@@ -40,16 +54,7 @@ function uniqueByUsername(users) {
     return Array.from(map.values());
 }
 
-function getMaxDate(arrays) {
-    let maxTs = 0;
-    arrays.forEach(arr => {
-        arr.forEach(u => {
-            if (u.timestamp > maxTs) maxTs = u.timestamp;
-        });
-    });
-    if (maxTs === 0) return Date.now();
-    return maxTs < 1e12 ? maxTs * 1000 : maxTs;
-}
+// getMaxDate removed in favor of precise filesystem timestamps
 
 function compareSnapshots(oldSnap, newSnap) {
     if (!oldSnap || !newSnap) return { lost: [], gained: [] };
@@ -98,7 +103,7 @@ function recalculateTimeline(snapshots) {
     });
 }
 
-function buildSnapshot({ followers, following, pending }) {
+function buildSnapshot({ followers, following, pending }, dateHint = null) {
     const followerSet = new Set(followers.map((u) => u.username));
     const followingSet = new Set(following.map((u) => u.username));
 
@@ -106,7 +111,7 @@ function buildSnapshot({ followers, following, pending }) {
     const fans = followers.filter((u) => !followingSet.has(u.username));
     const mutuals = following.filter((u) => followerSet.has(u.username));
 
-    const ts = getMaxDate([followers, following, pending]);
+    const ts = dateHint || Date.now();
     const now = new Date(ts);
 
     return {
@@ -161,7 +166,8 @@ async function processItem(itemPath) {
             isZip = true;
             console.log(`[ingest] Detected ZIP. Extracting ${path.basename(itemPath)}...`);
             const zip = new AdmZip(itemPath);
-            targetRoot = path.join(DATA_DIR, `extracted_${Date.now()}`);
+            await fs.ensureDir(DATA_TEMP);
+            targetRoot = path.join(DATA_TEMP, `extracted_${Date.now()}`);
             zip.extractAllTo(targetRoot, true);
         }
 
@@ -189,17 +195,25 @@ async function processItem(itemPath) {
             readJsonSafe(pendingPath),
         ]);
 
-        const database = await loadDatabase();
+        await acquireDatabaseLock();
+        try {
+            const database = await loadDatabase();
 
-        const snapshot = buildSnapshot({
-            followers: uniqueByUsername(followersRaw),
-            following: uniqueByUsername(followingRaw),
-            pending: uniqueByUsername(pendingRaw),
-        });
+            const stat = await fs.stat(followersPath);
+            const dateHint = stat.mtimeMs;
 
-        database.push(snapshot);
-        const sortedDatabase = recalculateTimeline(database);
-        await fs.writeJson(DATABASE_FILE, sortedDatabase, { spaces: 2 });
+            const snapshot = buildSnapshot({
+                followers: uniqueByUsername(followersRaw),
+                following: uniqueByUsername(followingRaw),
+                pending: uniqueByUsername(pendingRaw),
+            }, dateHint);
+
+            database.push(snapshot);
+            const sortedDatabase = recalculateTimeline(database);
+            await fs.writeJson(DATABASE_FILE, sortedDatabase, { spaces: 2 });
+        } finally {
+            releaseDatabaseLock();
+        }
 
         // Clean up the dropped file/folder entirely
         await fs.remove(itemPath);
@@ -224,6 +238,7 @@ async function bootstrap() {
         persistent: true,
         ignoreInitial: false,
         depth: 0, // Only watch the root of /data so we don't double-trigger on unzips
+        ignored: /(^|[\/\\])\../, // ignore hidden files/folders like .temp
         awaitWriteFinish: { stabilityThreshold: 2000, pollInterval: 100 },
     });
 
